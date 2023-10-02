@@ -1,0 +1,6 @@
+name "vibe-container"
+description "Container implementations used by vibe.d"
+targetType "library"
+sourcePaths "."
+importPaths "."
+dependency "stdx-allocator" version="~>2.77.0"
