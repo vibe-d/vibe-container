@@ -7,7 +7,7 @@
 	License: Subject to the terms of the MIT license, as written in the included LICENSE.txt file.
 	Authors: Sönke Ludwig
 */
-module vibe.internal.seahash;
+module vibe.container.seahash;
 
 @safe nothrow pure @nogc:
 
