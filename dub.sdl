@@ -1,4 +1,8 @@
 name "vibe-container"
 description "Container implementations used by vibe.d"
+authors "Sönke Ludwig"
+copyright "Copyright © 2016-2023, Sönke Ludwig"
+license "MIT"
+
 targetType "library"
 dependency "stdx-allocator" version="~>2.77.0"
