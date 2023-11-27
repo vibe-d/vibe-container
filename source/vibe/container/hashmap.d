@@ -150,6 +150,8 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 	{
 		import std.algorithm.mutation : move;
 
+		makeUnique();
+
 		auto idx = findIndex(key);
 		assert (idx != size_t.max, "Removing non-existent element.");
 		auto i = idx;
@@ -198,6 +200,7 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 
 	void clear()
 	{
+		makeUnique();
 		foreach (i; 0 .. m_table.length)
 			if (!Traits.equals(m_table[i].key, Traits.clearValue)) {
 				m_table[i].key = Traits.clearValue;
@@ -305,30 +308,37 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 	}
 
 	private void grow(size_t amount)
-	@trusted {
+	@safe {
 		auto newsize = m_length + amount;
 		if (newsize < (m_table.length*2)/3) {
-			int rc;
-			try rc = allocator.prefix(m_table);
-			catch (Exception e) assert(false, e.msg);
-			if (rc > 1) {
-				// enforce copy-on-write
-				auto oldtable = m_table;
-				try {
-					m_table = allocator.makeArray!TableEntry(m_table.length);
-					m_table[] = oldtable;
-					allocator.prefix(oldtable)--;
-					assert(allocator.prefix(oldtable) > 0);
-					allocator.prefix(m_table) = 1;
-				} catch (Exception e) {
-					assert(false, e.msg);
-				}
-			}
+			makeUnique();
 			return;
 		}
 		auto newcap = m_table.length ? m_table.length : 16;
 		while (newsize >= (newcap*2)/3) newcap *= 2;
 		resize(newcap);
+	}
+
+	private void makeUnique()
+	@trusted {
+		if (m_table is null) return;
+
+		int rc;
+		try rc = allocator.prefix(m_table);
+		catch (Exception e) assert(false, e.msg);
+		if (rc > 1) {
+			// enforce copy-on-write
+			auto oldtable = m_table;
+			try {
+				m_table = allocator.makeArray!TableEntry(m_table.length);
+				m_table[] = oldtable;
+				allocator.prefix(oldtable)--;
+				assert(allocator.prefix(oldtable) > 0);
+				allocator.prefix(m_table) = 1;
+			} catch (Exception e) {
+				assert(false, e.msg);
+			}
+		}
 	}
 
 	private void resize(size_t new_size)
