@@ -22,8 +22,8 @@ module vibe.container.ringbuffer;
 	`length`, `front` and `back` properties, as well as slice and index based
 	random access.
 
-	Both, FIFO and LIFO operation modes are supported, using `popFront` and
-	`popBack`.
+	Both, FIFO and LIFO operation modes are supported, using `removeFront` and
+	`removeBack`.
 */
 struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	import std.traits : hasElaborateDestructor, isCopyable;
@@ -105,7 +105,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	/// Removes all elements.
 	void clear()
 	{
-		popFrontN(length);
+		removeFrontN(length);
 		assert(m_fill == 0);
 		m_start = 0;
 	}
@@ -138,7 +138,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	void putN(size_t n) { assert(m_fill+n <= m_buffer.length); m_fill += n; }
 
 	/// Removes the first element from the buffer.
-	void popFront()
+	void removeFront()
 	{
 		assert(!empty);
 		static if (hasElaborateDestructor!T)
@@ -148,7 +148,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	}
 
 	/// Removes the first N elements from the buffer.
-	void popFrontN(size_t n)
+	void removeFrontN(size_t n)
 	{
 		assert(length >= n);
 		static if (hasElaborateDestructor!T) {
@@ -160,7 +160,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	}
 
 	/// Removes the last element from the buffer.
-	void popBack()
+	void removeBack()
 	{
 		assert(!empty);
 		static if (hasElaborateDestructor!T)
@@ -169,7 +169,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	}
 
 	/// Removes the last N elements from the buffer.
-	void popBackN(size_t n)
+	void removeBackN(size_t n)
 	{
 		assert(length >= n);
 		static if (hasElaborateDestructor!T) {
@@ -257,7 +257,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 					move(m_buffer[m_start + i], dst[i]);
 			}
 		}
-		popFrontN(dst.length);
+		removeFrontN(dst.length);
 	}
 
 	/// Enables `foreach` iteration over all elements.
@@ -354,7 +354,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 @safe unittest {
 	import std.range : isInputRange, isOutputRange;
 
-	static assert(isInputRange!(RingBuffer!int) && isOutputRange!(RingBuffer!int, int));
+	static assert(isInputRange!(RingBuffer!int.Range) && isOutputRange!(RingBuffer!int, int));
 
 	RingBuffer!(int, 5) buf;
 	assert(buf.length == 0 && buf.freeSpace == 5); buf.put(1); // |1 . . . .
@@ -364,9 +364,9 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	assert(buf.length == 4 && buf.freeSpace == 1); buf.put(5); // |1 2 3 4 5
 	assert(buf.length == 5 && buf.freeSpace == 0);
 	assert(buf.front == 1);
-	buf.popFront(); // .|2 3 4 5
+	buf.removeFront(); // .|2 3 4 5
 	assert(buf.front == 2);
-	buf.popFrontN(2); // . . .|4 5
+	buf.removeFrontN(2); // . . .|4 5
 	assert(buf.front == 4);
 	assert(buf.length == 2 && buf.freeSpace == 3);
 	buf.put([6, 7, 8]); // 6 7 8|4 5
@@ -381,7 +381,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	assert(dst[0 .. 2] == [1, 2]);
 
 	buf.put([0, 0, 0, 1, 2]); //|0 0 0 1 2
-	buf.popFrontN(2); //. .|0 1 2
+	buf.removeFrontN(2); //. .|0 1 2
 	buf.put([3, 4]); // 3 4|0 1 2
 	foreach(i, item; buf) {
 		assert(i == item);
@@ -408,7 +408,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		assert(*pcnt == 2);
 		s = S.init;
 		assert(*pcnt == 1);
-		buf.popBack();
+		buf.removeBack();
 		assert(*pcnt == 0);
 		buf.put(S(pcnt));
 		assert(*pcnt == 1);
@@ -423,7 +423,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		buf.put(S(pcnt));
 		buf.put(S(pcnt));
 		assert(*pcnt == 2);
-		buf.popFrontN(2);
+		buf.removeFrontN(2);
 		assert(*pcnt == 0);
 		buf.put(S(pcnt));
 		buf.put(S(pcnt));
