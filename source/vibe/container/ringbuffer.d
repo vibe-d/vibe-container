@@ -24,6 +24,10 @@ module vibe.container.ringbuffer;
 
 	Both, FIFO and LIFO operation modes are supported, using `removeFront` and
 	`removeBack`.
+
+	This struct has value semantics - copying the a `RingBuffer` value will copy
+	the whole buffer. Copy-on-write optimization may be implemented in the future,
+	but generally copying is discouraged.
 */
 struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	import std.traits : hasElaborateDestructor, isCopyable;
@@ -42,6 +46,12 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	static if (N == 0) {
 		/// Constructs a new rung buffer with given capacity (only if `N == 0`).
 		this(size_t capacity) { m_buffer = new T[capacity]; }
+
+		this(this)
+		{
+			if (m_buffer.length)
+				m_buffer = m_buffer.dup;
+		}
 
 		~this()
 		{
