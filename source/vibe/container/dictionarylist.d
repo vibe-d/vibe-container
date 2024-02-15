@@ -321,8 +321,8 @@ struct DictionaryList(VALUE, bool case_sensitive = true, size_t NUM_STATIC_FIELD
 		}
 	}
 
-	private ptrdiff_t getIndex(in Field[] map, string key, uint keysum)
-	const {
+	private ptrdiff_t getIndex(scope const Field[] map, string key, uint keysum)
+	const scope {
 		foreach (i, ref const(Field) entry; map) {
 			static if (USE_HASHSUM) if (entry.keyCheckSum != keysum) continue;
 			if (matches(entry.key, key)) return i;

@@ -63,7 +63,6 @@ void ensureNotInGC(T)(string info = null) nothrow
 
 
 final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
-	import vibe.internal.memory_legacy : AllocSize, alignedSize;
 	import std.algorithm.comparison : min, max;
 	import std.conv : emplace;
 
@@ -226,5 +225,40 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		m_freePools = null;
 
 		return true;
+	}
+}
+
+unittest {
+	auto alloc = new RegionListAllocator!(shared(GCAllocator))(1024, GCAllocator.instance);
+	auto mem = alloc.allocate(8);
+	assert(mem.length == 8);
+	alloc.deallocateAll();
+}
+
+template AllocSize(T)
+{
+	static if (is(T == class)) {
+		// workaround for a strange bug where AllocSize!SSLStream == 0: TODO: dustmite!
+		enum dummy = T.stringof ~ __traits(classInstanceSize, T).stringof;
+		enum AllocSize = __traits(classInstanceSize, T);
+	} else {
+		enum AllocSize = T.sizeof;
+	}
+}
+
+enum size_t alignment = 0x10;
+enum size_t alignmentMask = alignment-1;
+
+size_t alignedSize(size_t sz) nothrow
+{
+	return ((sz + alignment - 1) / alignment) * alignment;
+}
+
+unittest {
+	foreach( i; 0 .. 20 ){
+		auto ia = alignedSize(i);
+		assert(ia >= i);
+		assert((ia & alignmentMask) == 0);
+		assert(ia < i+alignment);
 	}
 }
