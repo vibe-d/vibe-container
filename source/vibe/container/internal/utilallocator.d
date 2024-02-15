@@ -62,7 +62,7 @@ void ensureNotInGC(T)(string info = null) nothrow
 }
 
 
-final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
+final struct RegionListAllocator(Allocator, bool leak = false) {
 	import std.algorithm.comparison : min, max;
 	import std.conv : emplace;
 
@@ -83,12 +83,14 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		m_baseAllocator = base;
 	}
 
+	@disable this(this);
+
 	~this()
 	{
 		deallocateAll();
 	}
 
-	override @property uint alignment() const { return 0x10; }
+	@property uint alignment() const { return 0x10; }
 
 	@property size_t totalSize()
 	@safe nothrow @nogc {
@@ -114,10 +116,11 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 	bool decRef() {
 		if (m_refCount-- > 0)
 			return true;
+		deallocateAll();
 		return false;
 	}
 
-	override void[] allocate(size_t sz, TypeInfo ti = null)
+	void[] allocate(size_t sz, TypeInfo ti = null)
 	{
 		auto aligned_sz = alignedSize(sz);
 
@@ -154,31 +157,31 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		return ret[0 .. sz];
 	}
 
-	override void[] alignedAllocate(size_t n, uint a) { return null; }
-	override bool alignedReallocate(ref void[] b, size_t size, uint alignment) { return false; }
-	override void[] allocateAll() { return null; }
-	override @property Ternary empty() const { return m_fullPools !is null ? Ternary.no : Ternary.yes; }
-	override size_t goodAllocSize(size_t s) { return alignedSize(s); }
+	void[] alignedAllocate(size_t n, uint a) { return null; }
+	bool alignedReallocate(ref void[] b, size_t size, uint alignment) { return false; }
+	void[] allocateAll() { return null; }
+	@property Ternary empty() const { return m_fullPools !is null ? Ternary.no : Ternary.yes; }
+	size_t goodAllocSize(size_t s) { return alignedSize(s); }
 
 	import std.traits : Parameters;
 	static if (is(Parameters!(IAllocator.resolveInternalPointer)[0] == const(void*))) {
-		override Ternary resolveInternalPointer(const void* p, ref void[] result) { return Ternary.unknown; }
+		Ternary resolveInternalPointer(const void* p, ref void[] result) { return Ternary.unknown; }
 	} else {
-		override Ternary resolveInternalPointer(void* p, ref void[] result) { return Ternary.unknown; }
+		Ternary resolveInternalPointer(void* p, ref void[] result) { return Ternary.unknown; }
 	}
 	static if (is(Parameters!(IAllocator.owns)[0] == const(void[]))) {
-		override Ternary owns(const void[] b) { return Ternary.unknown; }
+		Ternary owns(const void[] b) { return Ternary.unknown; }
 	} else {
-		override Ternary owns(void[] b) { return Ternary.unknown; }
+		Ternary owns(void[] b) { return Ternary.unknown; }
 	}
 
 
-	override bool reallocate(ref void[] arr, size_t newsize)
+	bool reallocate(ref void[] arr, size_t newsize)
 	{
 		return expand(arr, newsize);
 	}
 
-	override bool expand(ref void[] arr, size_t newsize)
+	bool expand(ref void[] arr, size_t newsize)
 	{
 		auto aligned_sz = alignedSize(arr.length);
 		auto aligned_newsz = alignedSize(newsize);
@@ -204,12 +207,12 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		return true;
 	}
 
-	override bool deallocate(void[] mem)
+	bool deallocate(void[] mem)
 	{
 		return false;
 	}
 
-	override bool deallocateAll()
+	bool deallocateAll()
 	{
 		// put all full Pools into the free pools list
 		for (Pool* p = cast(Pool*)m_fullPools, pnext; p; p = pnext) {
