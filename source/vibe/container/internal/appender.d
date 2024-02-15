@@ -228,10 +228,12 @@ struct FixedAppender(ArrayType : E[], size_t NELEM, E) {
 	static if( is(ElemType == char) ){
 		void put(dchar el)
 		{
+			import std.utf : encode;
+
 			if( el < 128 ) put(cast(char)el);
 			else {
 				char[4] buf;
-				auto len = std.utf.encode(buf, el);
+				auto len = encode(buf, el);
 				put(cast(ArrayType)buf[0 .. len]);
 			}
 		}
@@ -260,4 +262,12 @@ struct FixedAppender(ArrayType : E[], size_t NELEM, E) {
 	static if (!is(E == immutable)) {
 		void reset() { m_fill = 0; }
 	}
+}
+
+unittest {
+	FixedAppender!(string, 16) app;
+	app.put("foo");
+	app.put('b');
+	app.put("ar");
+	assert(app.data == "foobar");
 }
