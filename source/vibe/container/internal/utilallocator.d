@@ -1,17 +1,17 @@
 module vibe.container.internal.utilallocator;
 
-public import stdx.allocator : allocatorObject, CAllocatorImpl, dispose,
-	   expandArray, IAllocator, make, makeArray, shrinkArray, theAllocator;
-public import stdx.allocator.gc_allocator;
-public import stdx.allocator.mallocator;
-public import stdx.allocator.building_blocks.affix_allocator;
+public import std.experimental.allocator : CAllocatorImpl, IAllocator,
+	RCIAllocator, allocatorObject, dispose, expandArray, make, makeArray,
+	shrinkArray, theAllocator;
+public import std.experimental.allocator.gc_allocator;
+public import std.experimental.allocator.mallocator;
+public import std.experimental.allocator.building_blocks.affix_allocator;
 
 // NOTE: this needs to be used instead of theAllocator due to Phobos issue 17564
-@property IAllocator vibeThreadAllocator()
+@property RCIAllocator vibeThreadAllocator()
 @safe nothrow @nogc {
-	import stdx.allocator.gc_allocator;
-	static IAllocator s_threadAllocator;
-	if (!s_threadAllocator)
+	static RCIAllocator s_threadAllocator;
+	if (s_threadAllocator.isNull)
 		s_threadAllocator = () @trusted { return allocatorObject(GCAllocator.instance); } ();
 	return s_threadAllocator;
 }
@@ -74,6 +74,7 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		Pool* m_freePools;
 		Pool* m_fullPools;
 		size_t m_poolSize;
+		int m_refCount = 1;
 	}
 
 	this(size_t pool_size, Allocator base) @safe nothrow
@@ -107,6 +108,13 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		for (auto p = m_freePools; p; p = p.next)
 			amt += p.data.length - p.remaining.length;
 		return amt;
+	}
+
+	void incRef() { m_refCount++; }
+	bool decRef() {
+		if (m_refCount-- > 0)
+			return true;
+		return false;
 	}
 
 	override void[] allocate(size_t sz, TypeInfo ti = null)
