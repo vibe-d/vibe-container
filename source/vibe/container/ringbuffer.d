@@ -120,6 +120,15 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		m_start = 0;
 	}
 
+	/// Adds an element to the front of the buffer.
+	void putFront(T itm)
+	{
+		assert(m_fill < m_buffer.length);
+		m_start = mod(m_start + m_buffer.length - 1);
+		m_fill++;
+		m_buffer[m_start] = itm;
+	}
+
 	/// Adds elements to the back of the buffer.
 	void putBack()(T itm) { assert(m_fill < m_buffer.length); move(itm, m_buffer[mod(m_start + m_fill++)]); }
 	/// ditto
@@ -424,6 +433,10 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	assert(buf[].retro.equal([4, 3, 2, 1, 0]));
 	assert(buf[1 .. $-1].equal([1, 2, 3]));
 	assert(buf[1 .. $-1].retro.equal([3, 2, 1]));
+
+	buf.removeBack();
+	buf.putFront(-1);
+	assert(buf[].equal([-1, 0, 1, 2, 3]));
 }
 
 @safe unittest {
