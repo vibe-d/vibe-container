@@ -342,6 +342,8 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 
 		@property ref inout(T) front() inout return { assert(!empty); return m_buffer[m_start]; }
 
+		@property Range save() { return this; }
+
 		void popFront()
 		{
 			assert(!empty);
@@ -349,6 +351,21 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 			m_length--;
 			if (m_start >= m_buffer.length)
 				m_start = 0;
+		}
+
+		@property ref inout(T) back()
+		inout return {
+			assert(!empty);
+			auto idx = m_start + m_length - 1;
+			if (idx >= m_buffer.length)
+				idx -= m_buffer.length;
+			return m_buffer[idx];
+		}
+
+		void popBack()
+		{
+			assert(!empty);
+			m_length--;
 		}
 	}
 
@@ -362,7 +379,8 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 }
 
 @safe unittest {
-	import std.range : isInputRange, isOutputRange;
+	import std.range : isInputRange, isOutputRange, retro;
+	import std.algorithm.comparison : equal;
 
 	static assert(isInputRange!(RingBuffer!int.Range) && isOutputRange!(RingBuffer!int, int));
 
@@ -396,6 +414,12 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	foreach(i, item; buf) {
 		assert(i == item);
 	}
+
+	// test range interface
+	assert(buf[].equal([0, 1, 2, 3, 4]));
+	assert(buf[].retro.equal([4, 3, 2, 1, 0]));
+	assert(buf[1 .. $-1].equal([1, 2, 3]));
+	assert(buf[1 .. $-1].retro.equal([3, 2, 1]));
 }
 
 @safe unittest {
