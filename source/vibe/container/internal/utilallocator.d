@@ -1,17 +1,17 @@
 module vibe.container.internal.utilallocator;
 
-public import stdx.allocator : allocatorObject, CAllocatorImpl, dispose,
-	   expandArray, IAllocator, make, makeArray, shrinkArray, theAllocator;
-public import stdx.allocator.gc_allocator;
-public import stdx.allocator.mallocator;
-public import stdx.allocator.building_blocks.affix_allocator;
+public import std.experimental.allocator : CAllocatorImpl, IAllocator,
+	RCIAllocator, allocatorObject, dispose, expandArray, make, makeArray,
+	shrinkArray, theAllocator;
+public import std.experimental.allocator.gc_allocator;
+public import std.experimental.allocator.mallocator;
+public import std.experimental.allocator.building_blocks.affix_allocator;
 
 // NOTE: this needs to be used instead of theAllocator due to Phobos issue 17564
-@property IAllocator vibeThreadAllocator()
+@property RCIAllocator vibeThreadAllocator()
 @safe nothrow @nogc {
-	import stdx.allocator.gc_allocator;
-	static IAllocator s_threadAllocator;
-	if (!s_threadAllocator)
+	static RCIAllocator s_threadAllocator;
+	if (s_threadAllocator.isNull)
 		s_threadAllocator = () @trusted { return allocatorObject(GCAllocator.instance); } ();
 	return s_threadAllocator;
 }
@@ -62,7 +62,7 @@ void ensureNotInGC(T)(string info = null) nothrow
 }
 
 
-final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
+final struct RegionListAllocator(Allocator, bool leak = false) {
 	import std.algorithm.comparison : min, max;
 	import std.conv : emplace;
 
@@ -74,6 +74,7 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		Pool* m_freePools;
 		Pool* m_fullPools;
 		size_t m_poolSize;
+		int m_refCount = 1;
 	}
 
 	this(size_t pool_size, Allocator base) @safe nothrow
@@ -82,12 +83,14 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		m_baseAllocator = base;
 	}
 
+	@disable this(this);
+
 	~this()
 	{
 		deallocateAll();
 	}
 
-	override @property uint alignment() const { return 0x10; }
+	@property uint alignment() const { return 0x10; }
 
 	@property size_t totalSize()
 	@safe nothrow @nogc {
@@ -109,7 +112,15 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		return amt;
 	}
 
-	override void[] allocate(size_t sz, TypeInfo ti = null)
+	void incRef() { m_refCount++; }
+	bool decRef() {
+		if (m_refCount-- > 0)
+			return true;
+		deallocateAll();
+		return false;
+	}
+
+	void[] allocate(size_t sz, TypeInfo ti = null)
 	{
 		auto aligned_sz = alignedSize(sz);
 
@@ -146,31 +157,31 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		return ret[0 .. sz];
 	}
 
-	override void[] alignedAllocate(size_t n, uint a) { return null; }
-	override bool alignedReallocate(ref void[] b, size_t size, uint alignment) { return false; }
-	override void[] allocateAll() { return null; }
-	override @property Ternary empty() const { return m_fullPools !is null ? Ternary.no : Ternary.yes; }
-	override size_t goodAllocSize(size_t s) { return alignedSize(s); }
+	void[] alignedAllocate(size_t n, uint a) { return null; }
+	bool alignedReallocate(ref void[] b, size_t size, uint alignment) { return false; }
+	void[] allocateAll() { return null; }
+	@property Ternary empty() const { return m_fullPools !is null ? Ternary.no : Ternary.yes; }
+	size_t goodAllocSize(size_t s) { return alignedSize(s); }
 
 	import std.traits : Parameters;
 	static if (is(Parameters!(IAllocator.resolveInternalPointer)[0] == const(void*))) {
-		override Ternary resolveInternalPointer(const void* p, ref void[] result) { return Ternary.unknown; }
+		Ternary resolveInternalPointer(const void* p, ref void[] result) { return Ternary.unknown; }
 	} else {
-		override Ternary resolveInternalPointer(void* p, ref void[] result) { return Ternary.unknown; }
+		Ternary resolveInternalPointer(void* p, ref void[] result) { return Ternary.unknown; }
 	}
 	static if (is(Parameters!(IAllocator.owns)[0] == const(void[]))) {
-		override Ternary owns(const void[] b) { return Ternary.unknown; }
+		Ternary owns(const void[] b) { return Ternary.unknown; }
 	} else {
-		override Ternary owns(void[] b) { return Ternary.unknown; }
+		Ternary owns(void[] b) { return Ternary.unknown; }
 	}
 
 
-	override bool reallocate(ref void[] arr, size_t newsize)
+	bool reallocate(ref void[] arr, size_t newsize)
 	{
 		return expand(arr, newsize);
 	}
 
-	override bool expand(ref void[] arr, size_t newsize)
+	bool expand(ref void[] arr, size_t newsize)
 	{
 		auto aligned_sz = alignedSize(arr.length);
 		auto aligned_newsz = alignedSize(newsize);
@@ -196,12 +207,12 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		return true;
 	}
 
-	override bool deallocate(void[] mem)
+	bool deallocate(void[] mem)
 	{
 		return false;
 	}
 
-	override bool deallocateAll()
+	bool deallocateAll()
 	{
 		// put all full Pools into the free pools list
 		for (Pool* p = cast(Pool*)m_fullPools, pnext; p; p = pnext) {
