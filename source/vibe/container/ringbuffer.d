@@ -47,10 +47,14 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		/// Constructs a new rung buffer with given capacity (only if `N == 0`).
 		this(size_t capacity) { m_buffer = new T[capacity]; }
 
-		this(this)
-		{
-			if (m_buffer.length)
-				m_buffer = m_buffer.dup;
+		static if (isCopyable!T) {
+			this(this)
+			{
+				if (m_buffer.length)
+					m_buffer = m_buffer.dup;
+			}
+		} else {
+			@disable this(this);
 		}
 
 		~this()
@@ -120,10 +124,19 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		m_start = 0;
 	}
 
+	/// Adds an element to the front of the buffer.
+	void putFront(T itm)
+	{
+		assert(m_fill < m_buffer.length);
+		m_start = mod(m_start + m_buffer.length - 1);
+		m_fill++;
+		m_buffer[m_start] = move(itm);
+	}
+
 	/// Adds elements to the back of the buffer.
-	void put()(T itm) { assert(m_fill < m_buffer.length); move(itm, m_buffer[mod(m_start + m_fill++)]); }
+	void putBack()(T itm) { assert(m_fill < m_buffer.length); move(itm, m_buffer[mod(m_start + m_fill++)]); }
 	/// ditto
-	void put(TC : T)(scope TC[] itms)
+	void putBack(TC : T)(scope TC[] itms)
 	{
 		if (!itms.length) return;
 		assert(m_fill + itms.length <= m_buffer.length);
@@ -137,6 +150,8 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		}
 		m_fill += itms.length;
 	}
+	/// ditto
+	alias put = putBack;
 
 	/** Adds elements to the back of the buffer without overwriting the buffer.
 
@@ -145,7 +160,9 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		slice that can be directly written to, followed by calling `popFrontN`
 		with the number of elements that were written to the slice.
 	*/
-	void putN(size_t n) { assert(m_fill+n <= m_buffer.length); m_fill += n; }
+	void putBackN(size_t n) { assert(m_fill+n <= m_buffer.length); m_fill += n; }
+	/// ditto
+	alias putN = putBackN;
 
 	/// Removes the first element from the buffer.
 	void removeFront()
@@ -342,6 +359,10 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 
 		@property ref inout(T) front() inout return { assert(!empty); return m_buffer[m_start]; }
 
+		@property size_t length() const { return m_length; }
+
+		@property Range save() { return this; }
+
 		void popFront()
 		{
 			assert(!empty);
@@ -349,6 +370,39 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 			m_length--;
 			if (m_start >= m_buffer.length)
 				m_start = 0;
+		}
+
+		@property ref inout(T) back()
+		inout return {
+			assert(!empty);
+			auto idx = m_start + m_length - 1;
+			if (idx >= m_buffer.length)
+				idx -= m_buffer.length;
+			return m_buffer[idx];
+		}
+
+		void popBack()
+		{
+			assert(!empty);
+			m_length--;
+		}
+
+
+		size_t opDollar() const { return m_length; }
+
+		ref inout(T) opIndex(size_t index)
+		inout {
+			assert(index < m_length);
+			index += m_start;
+			if (index >= m_buffer.length)
+				index -= m_buffer.length;
+			return m_buffer[index];
+		}
+
+		Range opSlice(size_t from, size_t to)
+		{
+			assert(from <= to && to <= length);
+			return Range(m_buffer, m_start + from, to - from);
 		}
 	}
 
@@ -362,7 +416,8 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 }
 
 @safe unittest {
-	import std.range : isInputRange, isOutputRange;
+	import std.range : isInputRange, isOutputRange, retro;
+	import std.algorithm.comparison : equal;
 
 	static assert(isInputRange!(RingBuffer!int.Range) && isOutputRange!(RingBuffer!int, int));
 
@@ -396,6 +451,29 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	foreach(i, item; buf) {
 		assert(i == item);
 	}
+
+	// test range interface
+	assert(buf[].equal([0, 1, 2, 3, 4]));
+	assert(buf[].retro.equal([4, 3, 2, 1, 0]));
+	assert(buf[1 .. $-1].equal([1, 2, 3]));
+	assert(buf[1 .. $-1].retro.equal([3, 2, 1]));
+
+	assert(buf[].length == 5);
+	assert(buf[][0] == 0);
+	assert(buf[][2] == 2);
+	assert(buf[][$-1] == 4);
+
+	assert(buf[1 .. $-1].length == 3);
+	assert(buf[1 .. $-1][0] == 1);
+	assert(buf[1 .. $-1][2] == 3);
+	assert(buf[1 .. $-1][$-1] == 3);
+
+	assert(buf[1 .. $-1][1 .. 2].length == 1);
+	assert(buf[1 .. $-1][1 .. 2].equal([2]));
+
+	buf.removeBack();
+	buf.putFront(-1);
+	assert(buf[].equal([-1, 0, 1, 2, 3]));
 }
 
 @safe unittest {
@@ -442,4 +520,21 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		assert(*pcnt == 1);
 	}
 	assert(*pcnt == 0);
+}
+
+@safe unittest { // non-copyable struct
+	static struct S {
+		int i;
+		@disable this(this);
+		void move() {}
+	}
+
+	RingBuffer!S buf;
+	buf.capacity = 4;
+	buf.put(S(0));
+	buf.put(S(1));
+	assert(buf.front.i == 0);
+	assert(buf[1].i == 1);
+	buf.removeFrontN(2);
+	assert(buf.length == 0);
 }
