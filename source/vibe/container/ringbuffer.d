@@ -47,10 +47,14 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		/// Constructs a new rung buffer with given capacity (only if `N == 0`).
 		this(size_t capacity) { m_buffer = new T[capacity]; }
 
-		this(this)
-		{
-			if (m_buffer.length)
-				m_buffer = m_buffer.dup;
+		static if (isCopyable!T) {
+			this(this)
+			{
+				if (m_buffer.length)
+					m_buffer = m_buffer.dup;
+			}
+		} else {
+			@disable this(this);
 		}
 
 		~this()
@@ -126,7 +130,7 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		assert(m_fill < m_buffer.length);
 		m_start = mod(m_start + m_buffer.length - 1);
 		m_fill++;
-		m_buffer[m_start] = itm;
+		m_buffer[m_start] = move(itm);
 	}
 
 	/// Adds elements to the back of the buffer.
@@ -516,4 +520,21 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		assert(*pcnt == 1);
 	}
 	assert(*pcnt == 0);
+}
+
+@safe unittest { // non-copyable struct
+	static struct S {
+		int i;
+		@disable this(this);
+		void move() {}
+	}
+
+	RingBuffer!S buf;
+	buf.capacity = 4;
+	buf.put(S(0));
+	buf.put(S(1));
+	assert(buf.front.i == 0);
+	assert(buf[1].i == 1);
+	buf.removeFrontN(2);
+	assert(buf.length == 0);
 }
