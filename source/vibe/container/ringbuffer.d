@@ -355,6 +355,8 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 
 		@property ref inout(T) front() inout return { assert(!empty); return m_buffer[m_start]; }
 
+		@property size_t length() const { return m_length; }
+
 		@property Range save() { return this; }
 
 		void popFront()
@@ -379,6 +381,24 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		{
 			assert(!empty);
 			m_length--;
+		}
+
+
+		size_t opDollar() const { return m_length; }
+
+		ref inout(T) opIndex(size_t index)
+		inout {
+			assert(index < m_length);
+			index += m_start;
+			if (index >= m_buffer.length)
+				index -= m_buffer.length;
+			return m_buffer[index];
+		}
+
+		Range opSlice(size_t from, size_t to)
+		{
+			assert(from <= to && to <= length);
+			return Range(m_buffer, m_start + from, to - from);
 		}
 	}
 
@@ -433,6 +453,19 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	assert(buf[].retro.equal([4, 3, 2, 1, 0]));
 	assert(buf[1 .. $-1].equal([1, 2, 3]));
 	assert(buf[1 .. $-1].retro.equal([3, 2, 1]));
+
+	assert(buf[].length == 5);
+	assert(buf[][0] == 0);
+	assert(buf[][2] == 2);
+	assert(buf[][$-1] == 4);
+
+	assert(buf[1 .. $-1].length == 3);
+	assert(buf[1 .. $-1][0] == 1);
+	assert(buf[1 .. $-1][2] == 3);
+	assert(buf[1 .. $-1][$-1] == 3);
+
+	assert(buf[1 .. $-1][1 .. 2].length == 1);
+	assert(buf[1 .. $-1][1 .. 2].equal([2]));
 
 	buf.removeBack();
 	buf.putFront(-1);
