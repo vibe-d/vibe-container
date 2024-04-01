@@ -208,7 +208,7 @@ unittest {
 }
 
 
-struct FixedAppender(ArrayType : E[], size_t NELEM, E) {
+struct FixedAppender(ArrayType : E[], size_t NELEM, BufferOverflowMode OM = BufferOverflowMode.none, E) {
 	alias ElemType = Unqual!E;
 	private {
 		ElemType[NELEM] m_data;
@@ -222,6 +222,14 @@ struct FixedAppender(ArrayType : E[], size_t NELEM, E) {
 
 	void put(E el)
 	{
+		static if (OM == BufferOverflowMode.exception) {
+			if (m_fill >= m_data.length)
+				throw new Exception("Writing past end of FixedAppender");
+		} else static if (OM == BufferOverflowMode.ignore) {
+			if (m_fill >= m_data.length)
+				return;
+		}
+
 		m_data[m_fill++] = el;
 	}
 
@@ -253,6 +261,18 @@ struct FixedAppender(ArrayType : E[], size_t NELEM, E) {
 
 	void put(ArrayType arr)
 	{
+		static if (OM == BufferOverflowMode.exception) {
+			if (m_fill + arr.length > m_data.length) {
+				put(arr[0 .. m_data.length - m_fill]);
+				throw new Exception("Writing past end of FixedAppender");
+			}
+		} else static if (OM == BufferOverflowMode.ignore) {
+			if (m_fill + arr.length > m_data.length) {
+				put(arr[0 .. m_data.length - m_fill]);
+				return;
+			}
+		}
+
 		m_data[m_fill .. m_fill+arr.length] = arr[];
 		m_fill += arr.length;
 	}
@@ -271,3 +291,42 @@ unittest {
 	app.put("ar");
 	assert(app.data == "foobar");
 }
+
+unittest {
+	import std.exception : assertThrown;
+	import std.format : formattedWrite;
+
+	FixedAppender!(string, 8) fa1;
+	fa1.formattedWrite("foo: %s", 42);
+	assert(fa1.data == "foo: 42");
+
+	FixedAppender!(string, 6, BufferOverflowMode.exception) fa2;
+	fa2.formattedWrite("foo: %s", 1);
+	assert(fa2.data == "foo: 1");
+	fa2.clear();
+	assertThrown(fa2.formattedWrite("foo: %s", 42));
+	assert(fa2.data == "foo: 4");
+	assertThrown(fa2.put('\a'));
+	assertThrown(fa2.put("bc"));
+	assert(fa2.data == "foo: 4");
+
+	FixedAppender!(string, 6, BufferOverflowMode.ignore) fa3;
+	fa3.formattedWrite("foo: %s", 1);
+	assert(fa3.data == "foo: 1");
+	fa3.clear();
+	fa3.formattedWrite("foo: %s", 42);
+	assert(fa2.data == "foo: 4");
+	fa3.put('\a');
+	fa3.put("bc");
+	assert(fa3.data == "foo: 4");
+}
+
+
+/** Determines how to handle buffer overflows in `FixedAppender`.
+*/
+enum BufferOverflowMode {
+	none,   /// Results in an ArrayBoundsError and terminates the application
+	exception,  /// Throws an exception
+	ignore  /// Skips any extraneous bytes written
+}
+
