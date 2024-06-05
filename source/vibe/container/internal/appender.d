@@ -19,11 +19,19 @@ struct AllocAppender(ArrayType : E[], E) {
 	private {
 		ElemType[] m_data;
 		ElemType[] m_remaining;
-		IAllocator m_alloc;
+		RCIAllocator m_alloc;
+		IAllocator m_ialloc;
 		bool m_allocatedBuffer = false;
 	}
 
 	this(IAllocator alloc, ElemType[] initial_buffer = null)
+	{
+		m_ialloc = alloc;
+		m_data = initial_buffer;
+		m_remaining = initial_buffer;
+	}
+
+	this(RCIAllocator alloc, ElemType[] initial_buffer = null)
 	{
 		m_alloc = alloc;
 		m_data = initial_buffer;
@@ -37,7 +45,7 @@ struct AllocAppender(ArrayType : E[], E) {
 	void reset(AppenderResetMode reset_mode = AppenderResetMode.keepData)
 	{
 		if (reset_mode == AppenderResetMode.keepData) m_data = null;
-		else if (reset_mode == AppenderResetMode.freeData) { if (m_allocatedBuffer) m_alloc.deallocate(m_data); m_data = null; }
+		else if (reset_mode == AppenderResetMode.freeData) { if (m_allocatedBuffer) withAlloc!"deallocate"(m_data); m_data = null; }
 		m_remaining = m_data;
 	}
 
@@ -52,17 +60,17 @@ struct AllocAppender(ArrayType : E[], E) {
 	@trusted {
 		size_t nelems = m_data.length - m_remaining.length;
 		if (!m_data.length) {
-			m_data = cast(ElemType[])m_alloc.allocate(amount*E.sizeof);
+			m_data = cast(ElemType[])withAlloc!"allocate"(amount*E.sizeof);
 			m_remaining = m_data;
 			m_allocatedBuffer = true;
 		}
 		if (m_remaining.length < amount) {
 			if (m_allocatedBuffer) {
 				void[] vdata = m_data;
-				m_alloc.reallocate(vdata, (nelems+amount)*E.sizeof);
+				withAlloc!"reallocate"(vdata, (nelems+amount)*E.sizeof);
 				m_data = () @trusted { return cast(ElemType[])vdata; } ();
 			} else {
-				auto newdata = cast(ElemType[])m_alloc.allocate((nelems+amount)*E.sizeof);
+				auto newdata = cast(ElemType[])withAlloc!"allocate"((nelems+amount)*E.sizeof);
 				newdata[0 .. nelems] = m_data[0 .. nelems];
 				m_data = newdata;
 				m_allocatedBuffer = true;
@@ -147,6 +155,13 @@ struct AllocAppender(ArrayType : E[], E) {
 		while( new_size < min_size )
 			new_size = (new_size * 3) / 2;
 		reserve(new_size - m_data.length + m_remaining.length);
+	}
+
+	private auto withAlloc(string method, ARGS...)(auto ref ARGS args)
+	{
+		if (!m_alloc.isNull) return __traits(getMember, m_alloc, method)(args);
+		if (m_ialloc) return __traits(getMember, m_ialloc, method)(args);
+		assert(false);
 	}
 }
 
