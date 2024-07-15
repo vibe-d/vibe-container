@@ -259,8 +259,8 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 
 	auto byKey() { return bySlot.map!((ref e) => e.key); }
 	auto byKey() const { return bySlot.map!((ref e) => e.key); }
-	auto byValue() { return bySlot.map!((ref e) => e.value); }
-	auto byValue() const { return bySlot.map!((ref e) => e.value); }
+	auto byValue() { return bySlot.map!(ref(ref e) => e.value); }
+	auto byValue() const { return bySlot.map!(ref(ref e) => e.value); }
 	auto byKeyValue() { import std.typecons : Tuple; return bySlot.map!((ref e) => Tuple!(Key, "key", Value, "value")(e.key, e.value)); }
 	auto byKeyValue() const { import std.typecons : Tuple; return bySlot.map!((ref e) => Tuple!(const(Key), "key", const(Value), "value")(e.key, e.value)); }
 
