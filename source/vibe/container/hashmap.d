@@ -257,15 +257,15 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 		return 0;
 	}
 
-	auto byKey() { return bySlot.map!(e => e.key); }
-	auto byKey() const { return bySlot.map!(e => e.key); }
-	auto byValue() { return bySlot.map!(e => e.value); }
-	auto byValue() const { return bySlot.map!(e => e.value); }
-	auto byKeyValue() { import std.typecons : Tuple; return bySlot.map!(e => Tuple!(Key, "key", Value, "value")(e.key, e.value)); }
-	auto byKeyValue() const { import std.typecons : Tuple; return bySlot.map!(e => Tuple!(const(Key), "key", const(Value), "value")(e.key, e.value)); }
+	auto byKey() { return bySlot.map!((ref e) => e.key); }
+	auto byKey() const { return bySlot.map!((ref e) => e.key); }
+	auto byValue() { return bySlot.map!((ref e) => e.value); }
+	auto byValue() const { return bySlot.map!((ref e) => e.value); }
+	auto byKeyValue() { import std.typecons : Tuple; return bySlot.map!((ref e) => Tuple!(Key, "key", Value, "value")(e.key, e.value)); }
+	auto byKeyValue() const { import std.typecons : Tuple; return bySlot.map!((ref e) => Tuple!(const(Key), "key", const(Value), "value")(e.key, e.value)); }
 
-	private auto bySlot() { return m_table[].filter!(e => !Traits.equals(e.key, Traits.clearValue)); }
-	private auto bySlot() const { return m_table[].filter!(e => !Traits.equals(e.key, Traits.clearValue)); }
+	private auto bySlot() { return m_table[].filter!((ref e) => !Traits.equals(e.key, Traits.clearValue)); }
+	private auto bySlot() const { return m_table[].filter!((ref e) => !Traits.equals(e.key, Traits.clearValue)); }
 
 	private @property AllocatorInstanceType allocator()
 	{
