@@ -76,7 +76,7 @@ unittest
 		assert(hashMap[new Integer(x)] == x);
 }
 
-struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAllocator)
+struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = RCIAllocator)
 	if (is(typeof(Traits.clearValue) : TKey))
 {
 	import core.memory : GC;
@@ -269,15 +269,19 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 
 	private @property AllocatorInstanceType allocator()
 	{
-		static if (is(typeof(Allocator.instance)))
+		static if (is(typeof(Allocator.instance))) {
 			return AllocatorType.instance;
-		else {
-			if (!m_allocator._parent) {
-				static if (is(Allocator == IAllocator)) {
-					try m_allocator = typeof(m_allocator)(AW(vibeThreadAllocator()));
-					catch (Exception e) assert(false, e.msg);
-				} else assert(false, "Allocator not initialized.");
+		} else static if (is(Allocator == RCIAllocator)) {
+			if (m_allocator._parent.isNull) {
+				try m_allocator = typeof(m_allocator)(AW(vibeThreadAllocator()));
+				catch (Exception e) assert(false, e.msg);
 			}
+			return m_allocator;
+		} else static if (is(Allocator == IAllocator)) {
+			if (!m_allocator._parent)
+				assert(false, "Allocator not initialized.");
+			return m_allocator;
+		} else {
 			return m_allocator;
 		}
 	}
