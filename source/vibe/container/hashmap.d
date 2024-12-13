@@ -300,16 +300,24 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 		// allocate the new array, automatically initializes with empty entries (Traits.clearValue)
 		m_table = m_table.createNew(new_size);
 
+		if (oldtable.isUnique) {
 			// perform a move operation of all non-empty elements from the old array to the new one
-		foreach (ref el; oldtable)
+			foreach (ref el; oldtable)
 				if (!Traits.equals(el.key, Traits.clearValue)) {
-				auto idx = findInsertIndex(el.key);
-				(cast(ubyte[])(&m_table[idx])[0 .. 1])[] = (cast(ubyte[])(&el)[0 .. 1])[];
-			}
+					auto idx = findInsertIndex(el.key);
+					(cast(ubyte[])(&m_table[idx])[0 .. 1])[] = (cast(ubyte[])(&el)[0 .. 1])[];
+				}
 
-		// free the old table without calling destructors
-		if (oldtable.isUnique)
+			// free the old table without calling destructors
 			oldtable.deallocate();
+		} else {
+			// perform a copy operation of all non-empty elements from the old array to the new one
+			foreach (ref el; oldtable)
+				if (!Traits.equals(el.key, Traits.clearValue)) {
+					auto idx = findInsertIndex(el.key);
+					m_table[idx] = el;
+				}
+		}
 	}
 }
 
