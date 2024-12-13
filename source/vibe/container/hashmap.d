@@ -9,8 +9,8 @@ module vibe.container.hashmap;
 
 import vibe.container.seahash : seaHash;
 import vibe.container.internal.utilallocator;
+import vibe.container.internal.rctable;
 
-import std.conv : emplace;
 import std.traits;
 
 
@@ -86,12 +86,6 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 	alias Key = TKey;
 	alias Value = TValue;
 
-	Allocator AW(Allocator a) { return a; }
-	alias AllocatorType = AffixAllocator!(Allocator, int);
-	static if (is(typeof(AllocatorType.instance)))
-		alias AllocatorInstanceType = typeof(AllocatorType.instance);
-	else alias AllocatorInstanceType = AllocatorType;
-
 	struct TableEntry {
 		UnConst!Key key = Traits.clearValue;
 		Value value;
@@ -105,42 +99,19 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 			else this.value = value;
 		}
 	}
+
+	alias Table = RCTable!(TableEntry, Allocator);
+
 	private {
-		TableEntry[] m_table; // NOTE: capacity is always POT
+		Table m_table;
 		size_t m_length;
-		static if (!is(typeof(Allocator.instance)))
-			AllocatorInstanceType m_allocator;
 		bool m_resizing;
 	}
 
 	static if (!is(typeof(Allocator.instance))) {
 		this(Allocator allocator)
 		{
-			m_allocator = typeof(m_allocator)(AW(allocator));
-		}
-	}
-
-	~this()
-	{
-		int rc;
-		try rc = m_table is null ? 1 : () @trusted { return --allocator.prefix(m_table); } ();
-		catch (Exception e) assert(false, e.msg);
-
-		if (rc == 0) {
-			clear();
-			if (m_table.ptr !is null) () @trusted {
-				static if (hasIndirections!TableEntry) GC.removeRange(m_table.ptr);
-				try allocator.dispose(m_table);
-				catch (Exception e) assert(false, e.msg);
-			} ();
-		}
-	}
-
-	this(this)
-	@trusted {
-		if (m_table.ptr) {
-			try allocator.prefix(m_table)++;
-			catch (Exception e) assert(false, e.msg);
+			m_table = Table(allocator);
 		}
 	}
 
@@ -267,21 +238,6 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 	private auto bySlot() { return m_table[].filter!((ref e) => !Traits.equals(e.key, Traits.clearValue)); }
 	private auto bySlot() const { return m_table[].filter!((ref e) => !Traits.equals(e.key, Traits.clearValue)); }
 
-	private @property AllocatorInstanceType allocator()
-	{
-		static if (is(typeof(Allocator.instance)))
-			return AllocatorType.instance;
-		else {
-			if (!m_allocator._parent) {
-				static if (is(Allocator == IAllocator)) {
-					try m_allocator = typeof(m_allocator)(AW(vibeThreadAllocator()));
-					catch (Exception e) assert(false, e.msg);
-				} else assert(false, "Allocator not initialized.");
-			}
-			return m_allocator;
-		}
-	}
-
 	private size_t findIndex(Key key)
 	const {
 		if (m_length == 0) return size_t.max;
@@ -321,24 +277,9 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 
 	private void makeUnique()
 	@trusted {
-		if (m_table is null) return;
+		if (m_table.isUnique) return;
 
-		int rc;
-		try rc = allocator.prefix(m_table);
-		catch (Exception e) assert(false, e.msg);
-		if (rc > 1) {
-			// enforce copy-on-write
-			auto oldtable = m_table;
-			try {
-				m_table = allocator.makeArray!TableEntry(m_table.length);
-				m_table[] = oldtable;
-				allocator.prefix(oldtable)--;
-				assert(allocator.prefix(oldtable) > 0);
-				allocator.prefix(m_table) = 1;
-			} catch (Exception e) {
-				assert(false, e.msg);
-			}
-		}
+		m_table = m_table.dup;
 	}
 
 	private void resize(size_t new_size)
@@ -357,27 +298,18 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 		auto oldtable = m_table;
 
 		// allocate the new array, automatically initializes with empty entries (Traits.clearValue)
-		try {
-			m_table = allocator.makeArray!TableEntry(new_size);
-			allocator.prefix(m_table) = 1;
-		} catch (Exception e) assert(false, e.msg);
-		static if (hasIndirections!TableEntry) GC.addRange(m_table.ptr, m_table.length * TableEntry.sizeof);
-		// perform a move operation of all non-empty elements from the old array to the new one
+		m_table = m_table.createNew(new_size);
+
+			// perform a move operation of all non-empty elements from the old array to the new one
 		foreach (ref el; oldtable)
-			if (!Traits.equals(el.key, Traits.clearValue)) {
+				if (!Traits.equals(el.key, Traits.clearValue)) {
 				auto idx = findInsertIndex(el.key);
 				(cast(ubyte[])(&m_table[idx])[0 .. 1])[] = (cast(ubyte[])(&el)[0 .. 1])[];
 			}
 
-		// all elements have been moved to the new array, so free the old one without calling destructors
-		int rc;
-		try rc = oldtable is null ? 1 : --allocator.prefix(oldtable);
-		catch (Exception e) assert(false, e.msg);
-		if (rc == 0) {
-			static if (hasIndirections!TableEntry) GC.removeRange(oldtable.ptr);
-			try allocator.deallocate(oldtable);
-			catch (Exception e) assert(false, e.msg);
-		}
+		// free the old table without calling destructors
+		if (oldtable.isUnique)
+			oldtable.deallocate();
 	}
 }
 
@@ -507,6 +439,35 @@ unittest { // test for proper use of constructor/post-blit/destructor
 	}
 
 	assert(Test.constructedCounter == 0);
+}
+
+unittest { // large alignment test;
+	align(32) static struct S { int i; }
+
+	HashMap!(int, S)[] amaps;
+	 // NOTE: forcing new allocations to increase the likelyhood of getting a misaligned allocation from the GC
+	foreach (i; 0 .. 100) {
+		HashMap!(int, S) a;
+		a[1] = S(42);
+		a[2] = S(43);
+		assert(a[1] == S(42));
+		assert(a[2] == S(43));
+		assert(cast(size_t)cast(void*)&a[1] % S.alignof == 0);
+		assert(cast(size_t)cast(void*)&a[2] % S.alignof == 0);
+		amaps ~= a;
+	}
+
+	HashMap!(S, int)[] bmaps;
+	foreach (i; 0 .. 100) {
+		HashMap!(S, int) b;
+		b[S(1)] = 42;
+		b[S(2)] = 43;
+		assert(b[S(1)] == 42);
+		assert(b[S(2)] == 43);
+		assert(cast(size_t)cast(void*)&b[S(1)] % S.alignof == 0);
+		assert(cast(size_t)cast(void*)&b[S(2)] % S.alignof == 0);
+		bmaps ~= b;
+	}
 }
 
 private template UnConst(T) {
