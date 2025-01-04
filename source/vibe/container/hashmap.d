@@ -321,7 +321,7 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 	}
 }
 
-nothrow unittest {
+@safe nothrow unittest {
 	import std.conv;
 
 	HashMap!(string, string) map;

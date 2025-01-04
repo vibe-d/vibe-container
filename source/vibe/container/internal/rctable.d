@@ -44,7 +44,7 @@ struct RCTable(T, Allocator = IAllocator) {
 	}
 
 	~this()
-	{
+	@trusted {
 		if (m_table.ptr && --this.refCount == 0) {
 			static if (hasIndirections!T) {
 				if (m_table.ptr !is null) () @trusted {
