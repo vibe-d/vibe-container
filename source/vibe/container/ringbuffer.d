@@ -178,6 +178,8 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	void removeFrontN(size_t n)
 	{
 		assert(length >= n);
+		if (!length) return;
+
 		static if (hasElaborateDestructor!T) {
 			foreach (i; 0 .. n)
 				destroy(m_buffer[mod(m_start + i)]);
