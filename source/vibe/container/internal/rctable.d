@@ -46,7 +46,7 @@ struct RCTable(T, Allocator = IAllocator) {
 	~this()
 	@trusted {
 		if (m_table.ptr && --this.refCount == 0) {
-			static if (hasIndirections!T) {
+			static if (hasIndirections!T && !is(Allocator == GCAllocator)) {
 				if (m_table.ptr !is null) () @trusted {
 					GC.removeRange(m_table.ptr);
 				}();
@@ -85,7 +85,8 @@ struct RCTable(T, Allocator = IAllocator) {
 			assert(cast(size_t)cast(void*)m_table.ptr % T.alignof == 0);
 			this.refCount = 1;
 		} catch (Exception e) assert(false, e.msg);
-		static if (hasIndirections!T) GC.addRange(m_table.ptr, m_table.length * T.sizeof);
+
+		static if (hasIndirections!T && !is(Allocator == GCAllocator)) GC.addRange(m_table.ptr, m_table.length * T.sizeof);
 	}
 
 	/// Deallocates without running destructors
