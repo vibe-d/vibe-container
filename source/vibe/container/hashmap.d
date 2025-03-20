@@ -241,11 +241,11 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 	private size_t findIndex(Key key)
 	const {
 		if (m_length == 0) return size_t.max;
-		size_t start = Traits.hashOf(key) & (m_table.length-1);
+		size_t start = Traits.hashOf(key) & (m_table.length - 1);
 		auto i = start;
 		while (!Traits.equals(m_table[i].key, key)) {
 			if (Traits.equals(m_table[i].key, Traits.clearValue)) return size_t.max;
-			if (++i >= m_table.length) i -= m_table.length;
+			i = (i + 1) & (m_table.length - 1);
 			if (i == start) return size_t.max;
 		}
 		return i;

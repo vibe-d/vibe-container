@@ -86,13 +86,18 @@ struct RCTable(T, Allocator = IAllocator) {
 			this.refCount = 1;
 		} catch (Exception e) assert(false, e.msg);
 
-		static if (hasIndirections!T && !is(Allocator == GCAllocator)) GC.addRange(m_table.ptr, m_table.length * T.sizeof);
+		static if (hasIndirections!T && !is(Allocator == GCAllocator))
+			GC.addRange(m_table.ptr, m_table.length * T.sizeof);
 	}
 
 	/// Deallocates without running destructors
 	void deallocate()
 	nothrow {
 		try {
+			static if (hasIndirections!T && !is(Allocator == GCAllocator))
+				if (m_table.ptr !is null)
+					GC.removeRange(m_table.ptr);
+
 			static if (needManualAlignment) {
 				allocator.deallocate(m_unalignedTable);
 				m_unalignedTable = null;
