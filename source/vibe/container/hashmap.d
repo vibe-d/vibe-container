@@ -81,6 +81,7 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 {
 	import vibe.container.internal.traits : isOpApplyDg;
 	import std.algorithm.iteration : filter, map;
+	import std.algorithm.mutation : moveEmplace;
 
 	alias Key = TKey;
 	alias Value = TValue;
@@ -304,7 +305,7 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 			foreach (ref el; oldtable)
 				if (!Traits.equals(el.key, Traits.clearValue)) {
 					auto idx = findInsertIndex(el.key);
-					(cast(ubyte[])(&m_table[idx])[0 .. 1])[] = (cast(ubyte[])(&el)[0 .. 1])[];
+					moveEmplace(el, m_table[idx]);
 				}
 
 			// free the old table without calling destructors
