@@ -125,18 +125,20 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	}
 
 	/// Adds an element to the front of the buffer.
-	void putFront(T itm)
+	void insertFront(T itm)
 	{
 		assert(m_fill < m_buffer.length);
 		m_start = mod(m_start + m_buffer.length - 1);
 		m_fill++;
 		m_buffer[m_start] = move(itm);
 	}
+	/// ditto
+	alias putFront = insertFront;
 
 	/// Adds elements to the back of the buffer.
-	void putBack()(T itm) { assert(m_fill < m_buffer.length); move(itm, m_buffer[mod(m_start + m_fill++)]); }
+	void insertBack()(T itm) { assert(m_fill < m_buffer.length); move(itm, m_buffer[mod(m_start + m_fill++)]); }
 	/// ditto
-	void putBack(TC : T)(scope TC[] itms)
+	void insertBack(TC : T)(scope TC[] itms)
 	{
 		if (!itms.length) return;
 		assert(m_fill + itms.length <= m_buffer.length);
@@ -152,6 +154,8 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 	}
 	/// ditto
 	alias put = putBack;
+	/// ditto
+	alias putBack = insertBack;
 
 	/** Adds elements to the back of the buffer without overwriting the buffer.
 
@@ -160,9 +164,11 @@ struct RingBuffer(T, size_t N = 0, bool INITIALIZE = true) {
 		slice that can be directly written to, followed by calling `popFrontN`
 		with the number of elements that were written to the slice.
 	*/
-	void putBackN(size_t n) { assert(m_fill+n <= m_buffer.length); m_fill += n; }
+	void insertBackN(size_t n) { assert(m_fill+n <= m_buffer.length); m_fill += n; }
 	/// ditto
 	alias putN = putBackN;
+	/// ditto
+	alias putBackN = insertBackN;
 
 	/// Removes the first element from the buffer.
 	void removeFront()

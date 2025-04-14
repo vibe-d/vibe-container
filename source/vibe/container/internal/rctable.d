@@ -23,7 +23,7 @@ struct RCTable(T, Allocator = IAllocator) {
 
 	private {
 		static if (needManualAlignment) {
-			T[] m_unalignedTable;
+			ubyte[] m_unalignedTable;
 		}
 		T[] m_table; // NOTE: capacity is always POT
 		static if (!is(typeof(Allocator.instance)))
@@ -72,12 +72,15 @@ struct RCTable(T, Allocator = IAllocator) {
 
 		try {
 			static if (needManualAlignment) {
-				m_unalignedTable = allocator.makeArray!T(length + 1);
+				m_unalignedTable = cast(ubyte[])allocator.allocate((length + 1) * T.sizeof);
 				() @trusted {
+					import core.lifetime : emplace;
 					auto mem = cast(ubyte[])m_unalignedTable;
 					mem = mem[T.alignof - cast(size_t)mem.ptr % T.alignof .. $];
 					assert(cast(size_t)mem.ptr % T.alignof == 0);
 					m_table = cast(T[])mem[0 .. length * T.sizeof];
+					foreach (ref el; m_table)
+						emplace!T(&el);
 				} ();
 			} else {
 				m_table = allocator.makeArray!T(length);
@@ -156,5 +159,19 @@ struct RCTable(T, Allocator = IAllocator) {
 			}
 			return m_allocator;
 		}
+	}
+}
+
+unittest { // check that aligned initialization works correctly
+	align(64)
+	struct S {
+		ubyte[16] a = 0x00;
+		ubyte[16] b = 0xFF;
+	}
+
+	RCTable!S table;
+	foreach (i; 0 .. 100) {
+		table = table.createNew(4);
+		assert(table[0] == S.init);
 	}
 }
