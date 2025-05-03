@@ -116,6 +116,11 @@ struct MultiHashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator 
 		m_length = 0;
 	}
 
+	void reserve(size_t amount)
+	{
+		grow(amount);
+	}
+
 	/** Inserts a an element into the map.
 
 		Note that duplicates will be inserted at the back of the range of
