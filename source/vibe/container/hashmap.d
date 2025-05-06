@@ -124,7 +124,9 @@ struct HashMap(TKey, TValue, Traits = DefaultHashMapTraits!TKey, Allocator = IAl
 		makeUnique();
 
 		auto idx = findIndex(key);
-		assert (idx != size_t.max, "Removing non-existent element.");
+		if (idx == size_t.max)
+			return;
+
 		auto i = idx;
 		while (true) {
 			m_table[i].key = Traits.clearValue;

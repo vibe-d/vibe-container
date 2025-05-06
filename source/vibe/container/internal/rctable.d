@@ -90,7 +90,7 @@ struct RCTable(T, Allocator = IAllocator) {
 		} catch (Exception e) assert(false, e.msg);
 
 		static if (hasIndirections!T && !is(Allocator == GCAllocator))
-			GC.addRange(m_table.ptr, m_table.length * T.sizeof);
+			GC.addRange(m_table.ptr, m_table.length * T.sizeof, typeid(T));
 	}
 
 	/// Deallocates without running destructors
