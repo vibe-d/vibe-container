@@ -46,11 +46,8 @@ struct RCTable(T, Allocator = IAllocator) {
 	~this()
 	@trusted {
 		if (m_table.ptr && --this.refCount == 0) {
-			static if (hasIndirections!T && !is(Allocator == GCAllocator)) {
-				if (m_table.ptr !is null) () @trusted {
-					GC.removeRange(m_table.ptr);
-				}();
-			}
+			static if (hasIndirections!T && !is(Allocator == GCAllocator))
+				() @trusted { GC.removeRange(m_table.ptr); } ();
 
 			try {
 				static if (needManualAlignment) {
