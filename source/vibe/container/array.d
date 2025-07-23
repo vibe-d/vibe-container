@@ -1,4 +1,4 @@
-module vibe.container.vector;
+module vibe.container.array;
 
 import vibe.container.internal.rctable;
 import vibe.container.internal.utilallocator;
@@ -7,13 +7,13 @@ import std.algorithm.comparison : max;
 import std.algorithm.mutation : swap;
 
 
-/** Represents a deterministically allocated vector/array type.
+/** Represents a deterministically allocated array type.
 
 	The underlying buffer is allocated in powers of two and uses copy-on-write
 	to enable value semantics without requiring to copy data when passing
-	copies of the vector around.
+	copies of the array around.
 */
-struct Vector(T, Allocator = GCAllocator)
+struct Array(T, Allocator = GCAllocator)
 {
 	private {
 		alias Table = RCTable!(T, Allocator);
@@ -29,12 +29,12 @@ struct Vector(T, Allocator = GCAllocator)
 	}
 
 
-	/// Determines whether the vector is currently empty.
+	/// Determines whether the array is currently empty.
 	bool empty() const { return m_length == 0; }
 
 	/** The current number of elements.
 
-		Note that reducing the length of a vector will not free the underlying
+		Note that reducing the length of a array will not free the underlying
 		buffer, but instead will only make use of a smaller portion. This
 		enables increasing the length later without having to re-allocate.
 	*/
@@ -62,7 +62,7 @@ struct Vector(T, Allocator = GCAllocator)
 		m_length = count;
 	}
 
-	/// Appends elements to the end of the vector
+	/// Appends elements to the end of the array
 	void insertBack(T element)
 	{
 		makeUnique();
@@ -101,18 +101,18 @@ struct Vector(T, Allocator = GCAllocator)
 		void opOpAssign(string op = "~")(const(T)[] elements) { insertBack(elements); }
 	}
 
-	/// Removes the last element of the vector
+	/// Removes the last element of the array
 	void removeBack()
 	{
-		assert(length >= 1, "Attempt to remove element from empty vector");
+		assert(length >= 1, "Attempt to remove element from empty array");
 		length = length - 1;
 	}
 
 	/** Accesses the element at the given index.
 
-		Note that accessing an alement of a non-const vector will trigger the
+		Note that accessing an alement of a non-const array will trigger the
 		copy-on-write logic and may allocate, whereas accessing an element of
-		a `const` vector will not.
+		a `const` array will not.
 	*/
 	ref const(T) opIndex(size_t index) const return { return m_table[index]; }
 	/// ditto
@@ -120,19 +120,19 @@ struct Vector(T, Allocator = GCAllocator)
 
 	/** Accesses a slice of elements.
 
-		Note that accessing an alement of a non-const vector will trigger the
+		Note that accessing an alement of a non-const array will trigger the
 		copy-on-write logic and may allocate, whereas accessing an element of
-		a `const` vector will not.
+		a `const` array will not.
 	*/
 	const(T)[] opSlice(size_t from, size_t to) const return { return m_table[from .. to]; }
 	/// ditto
 	T[] opSlice(size_t from, size_t to) return { makeUnique(); return m_table[from .. to]; }
 
-	/** Returns a slice of all elements of the vector.
+	/** Returns a slice of all elements of the array.
 
-		Note that accessing an alement of a non-const vector will trigger the
+		Note that accessing an alement of a non-const array will trigger the
 		copy-on-write logic and may allocate, whereas accessing an element of
-		a `const` vector will not.
+		a `const` array will not.
 	*/
 	const(T)[] opSlice() const return { return m_table[0 .. length]; }
 	/// ditto
@@ -152,7 +152,7 @@ struct Vector(T, Allocator = GCAllocator)
 
 
 @safe nothrow unittest {
-	Vector!int v;
+	Array!int v;
 	assert(v.length == 0);
 	v.length = 1;
 	assert(v.length == 1);
