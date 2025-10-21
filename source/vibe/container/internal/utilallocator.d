@@ -6,6 +6,8 @@ public import stdx.allocator.gc_allocator;
 public import stdx.allocator.mallocator;
 public import stdx.allocator.building_blocks.affix_allocator;
 
+public import std.typecons;
+
 // NOTE: this needs to be used instead of theAllocator due to Phobos issue 17564
 @property IAllocator vibeThreadAllocator()
 @safe nothrow @nogc {
@@ -201,7 +203,11 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		return false;
 	}
 
-	override bool deallocateAll()
+	override bool deallocateAll() {
+		return deallocateAll(Yes.freeMemory);
+	}
+
+	bool deallocateAll(Flag!"freeMemory" freeMemory = Yes.freeMemory)
 	{
 		// put all full Pools into the free pools list
 		for (Pool* p = cast(Pool*)m_fullPools, pnext; p; p = pnext) {
@@ -214,15 +220,17 @@ final class RegionListAllocator(Allocator, bool leak = false) : IAllocator {
 		for (Pool* p = cast(Pool*)m_freePools; p; p = p.next)
 			p.remaining = p.data;
 
-		Pool* pnext;
-		for (auto p = cast(Pool*)m_freePools; p; p = pnext) {
-			pnext = p.next;
-			static if (!leak) {
-				m_baseAllocator.deallocate(p.data);
-				m_baseAllocator.deallocate((cast(void*)p)[0 .. AllocSize!Pool]);
+		if (freeMemory == Yes.freeMemory) {
+			Pool* pnext;
+			for (auto p = cast(Pool*)m_freePools; p; p = pnext) {
+				pnext = p.next;
+				static if (!leak) {
+					m_baseAllocator.deallocate(p.data);
+					m_baseAllocator.deallocate((cast(void*)p)[0 .. AllocSize!Pool]);
+				}
 			}
+			m_freePools = null;
 		}
-		m_freePools = null;
 
 		return true;
 	}
